@@ -3,12 +3,46 @@ import os
 from typing import Optional
 import httpx
 from datetime import datetime, timedelta
+import re
 
 
 class DuffelClient:
     """Client for Duffel Flights API"""
 
     BASE_URL = "https://api.duffel.com"
+
+    @staticmethod
+    def parse_duration(iso_duration: str) -> str:
+        """Convert ISO 8601 duration (PT9H54M) to readable format (9h 54m)"""
+        if not iso_duration:
+            return "Unknown"
+
+        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?', iso_duration)
+        if not match:
+            return iso_duration
+
+        hours = match.group(1) or "0"
+        minutes = match.group(2) or "0"
+
+        parts = []
+        if hours != "0":
+            parts.append(f"{hours}h")
+        if minutes != "0":
+            parts.append(f"{minutes}m")
+
+        return " ".join(parts) if parts else "0m"
+
+    @staticmethod
+    def format_datetime(iso_datetime: str) -> str:
+        """Convert ISO datetime to readable format"""
+        if not iso_datetime:
+            return "Unknown"
+
+        try:
+            dt = datetime.fromisoformat(iso_datetime.replace('Z', '+00:00'))
+            return dt.strftime("%b %d, %I:%M %p")
+        except:
+            return iso_datetime
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("DUFFEL_API_KEY_LIVE")
@@ -199,34 +233,41 @@ def format_duffel_for_display(result: dict) -> str:
     """Format Duffel results for user display"""
 
     if "error" in result:
-        return f"❌ Duffel search failed: {result.get('message', 'Unknown error')}"
+        return f"❌ Search failed: {result.get('message', 'Unknown error')}"
 
     offers = result.get("offers", [])
 
     if not offers:
-        return "No flights found from Duffel."
+        msg = result.get("message", "No flights found")
+        return f"❌ {msg}"
 
-    output = ["🎯 **Flights from Duffel:**\n"]
+    output = ["# ✈️ Flight Options Found\n"]
 
     for i, offer in enumerate(offers[:3], 1):
-        output.append(f"\n**Option {i}:**")
-        output.append(f"💰 Total: {offer['total_price']} ({offer['price_per_passenger']} per person)")
-        output.append(f"👥 Passengers: {offer['passengers']}")
+        output.append(f"## Option {i}")
+        output.append(f"**💵 Price:** {offer['price_per_passenger']} per person | {offer['total_price']} total")
+        output.append(f"**👥 Passengers:** {offer['passengers']}\n")
 
         for j, slice_info in enumerate(offer["slices"], 1):
-            slice_type = "Outbound" if j == 1 else "Return"
-            output.append(f"\n**{slice_type} Flight:**")
-            output.append(f"✈️ {slice_info['origin']} → {slice_info['destination']}")
-            output.append(f"🕐 Departs: {slice_info['departure_time']}")
-            output.append(f"🕑 Arrives: {slice_info['arrival_time']}")
-            output.append(f"⏱️ Duration: {slice_info['duration']}")
-            output.append(f"🔄 Stops: {slice_info['stops']}")
+            slice_type = "🛫 Outbound" if j == 1 else "🛬 Return"
+            duration = DuffelClient.parse_duration(slice_info['duration'])
+            dep_time = DuffelClient.format_datetime(slice_info['departure_time'])
+            arr_time = DuffelClient.format_datetime(slice_info['arrival_time'])
+
+            output.append(f"### {slice_type}: {slice_info['origin']} → {slice_info['destination']}")
+            output.append(f"- **Departs:** {dep_time}")
+            output.append(f"- **Arrives:** {arr_time}")
+            output.append(f"- **Duration:** {duration}")
+            output.append(f"- **Stops:** {slice_info['stops']}")
 
             if slice_info['stops'] > 0:
-                output.append("Segments:")
+                output.append("\n**Flight segments:**")
                 for seg in slice_info["segments"]:
-                    output.append(f"  • {seg['airline']} {seg['flight_number']}: {seg['origin']} → {seg['destination']}")
+                    seg_duration = DuffelClient.parse_duration(seg.get('duration', ''))
+                    output.append(f"  - {seg['airline']} {seg['flight_number']}: {seg['origin']} → {seg['destination']} ({seg_duration})")
 
-        output.append("---")
+            output.append("")
+
+        output.append("---\n")
 
     return "\n".join(output)

@@ -156,15 +156,15 @@ async def search_dual(request: FlightSearchRequest):
             max_budget_per_passenger=request.max_budget_per_passenger
         )
 
-        formatted = format_duffel_for_display(result)
-
         return {
             "origin": request.origin,
             "destination": request.destination,
             "departure_date": request.departure_date,
             "return_date": return_date,
             "passengers": request.passengers,
-            "results": formatted
+            "offers": result.get("offers", []),
+            "error": result.get("error"),
+            "message": result.get("message")
         }
 
     except Exception as e:
