@@ -19,7 +19,7 @@ class DuffelClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Duffel-Version": "v1"
+            "Duffel-Version": "v2"
         }
 
     async def search_flights(
