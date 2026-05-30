@@ -304,6 +304,14 @@
                 <small style="color: #666; font-size: 13px;">Leave empty for no limit</small>
             </div>
 
+            <div class="form-group">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="flexibleDates" style="width: auto; margin-right: 10px;">
+                    <span>Flexible dates (search ±3 days for best price)</span>
+                </label>
+                <small style="color: #666; font-size: 13px;">Takes longer but finds cheaper alternatives</small>
+            </div>
+
             <button type="submit" id="searchBtn">Search Flights</button>
         </form>
 
@@ -362,6 +370,10 @@
         function renderFlightCard(offer, optionNum) {
             const slices = offer.slices || [];
 
+            // Check if alternate date
+            const altDate = offer.search_departure_date;
+            const altDateBadge = altDate ? `<span style="background: #ffeaa7; color: #d63031; padding: 3px 10px; border-radius: 15px; font-size: 12px; margin-left: 10px;">Departs ${altDate}</span>` : '';
+
             const slicesHTML = slices.map((slice, idx) => {
                 const sliceType = idx === 0 ? '🛫 Outbound' : '🛬 Return';
                 const stopsClass = slice.stops === 0 ? 'no-stops' : '';
@@ -413,7 +425,7 @@
                 <div class="flight-card">
                     <div class="flight-header">
                         <div>
-                            <h3 style="margin: 0; color: #333;">Option ${optionNum}</h3>
+                            <h3 style="margin: 0; color: #333;">Option ${optionNum}${altDateBadge}</h3>
                             <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">${offer.passengers} passenger${offer.passengers > 1 ? 's' : ''}</p>
                         </div>
                         <div class="price-tag">
@@ -436,6 +448,7 @@
             const passengers = document.getElementById('passengers').value;
             const sortBy = document.getElementById('sortBy').value;
             const maxBudget = document.getElementById('maxBudget').value;
+            const flexibleDates = document.getElementById('flexibleDates').checked;
 
             // Hide previous results/errors
             results.style.display = 'none';
@@ -452,7 +465,8 @@
                     return_date: returnDate,
                     passengers: parseInt(passengers),
                     destination: "Portland, Oregon, PDX",
-                    sort_by: sortBy
+                    sort_by: sortBy,
+                    flexible_dates: flexibleDates
                 };
 
                 // Add budget filter if specified
