@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from langchain.agents import create_agent
@@ -74,6 +76,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Flight Search AI API", lifespan=lifespan)
+
+# Serve static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 SYSTEM_PROMPT = """
@@ -153,11 +158,16 @@ class ChatRequest(BaseModel):
 
 
 @app.get("/")
+def home():
+    """Serve the web UI"""
+    return FileResponse("static/index.html")
+
+
+@app.get("/health")
 def health_check():
     return {
         "status": "ok",
         "message": "Flight Search AI API is running",
-        "try_docs": "http://127.0.0.1:8000/docs",
     }
 
 

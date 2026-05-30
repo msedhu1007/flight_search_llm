@@ -55,7 +55,21 @@ uv run uvicorn app:app --reload
 
 Visit: http://127.0.0.1:8000/docs
 
-## API Endpoints
+## Usage
+
+### Web Interface (Easy for Everyone)
+
+Just open the URL in a browser: `https://your-app.up.railway.app`
+
+Simple form:
+1. Enter origin (Nashville, BNA, etc.)
+2. Pick departure date
+3. Select passengers
+4. Click "Search Flights"
+
+Results show instantly on same page.
+
+## API Endpoints (for Developers)
 
 ### `POST /chat`
 
