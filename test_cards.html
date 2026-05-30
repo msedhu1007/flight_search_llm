@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Cards Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .flight-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .flight-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+
+        .flight-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .price-tag {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .price-detail {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .flight-section {
+            margin: 20px 0;
+        }
+
+        .section-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .flight-route {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .airport {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .arrow {
+            color: #667eea;
+            font-size: 20px;
+        }
+
+        .flight-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .detail-item {
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .detail-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            font-size: 15px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .stops-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            background: #ffeaa7;
+            color: #d63031;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .no-stops {
+            background: #55efc4;
+            color: #00b894;
+        }
+
+        .segment {
+            padding: 10px;
+            margin: 8px 0;
+            background: white;
+            border-left: 3px solid #667eea;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✈️ Flight Cards Test - BNA to PDX</h1>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function parseDuration(iso) {
+            if (!iso) return 'Unknown';
+            const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+            if (!match) return iso;
+            const h = match[1] || '0';
+            const m = match[2] || '0';
+            const parts = [];
+            if (h !== '0') parts.push(`${h}h`);
+            if (m !== '0') parts.push(`${m}m`);
+            return parts.join(' ') || '0m';
+        }
+
+        function formatDateTime(iso) {
+            if (!iso) return 'Unknown';
+            try {
+                const dt = new Date(iso);
+                return dt.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                });
+            } catch {
+                return iso;
+            }
+        }
+
+        function renderFlightCard(offer, optionNum) {
+            const slices = offer.slices || [];
+
+            const slicesHTML = slices.map((slice, idx) => {
+                const sliceType = idx === 0 ? '🛫 Outbound' : '🛬 Return';
+                const stopsClass = slice.stops === 0 ? 'no-stops' : '';
+                const stopsText = slice.stops === 0 ? 'Direct' : `${slice.stops} stop${slice.stops > 1 ? 's' : ''}`;
+
+                const segmentsHTML = slice.stops > 0 ? `
+                    <div style="margin-top: 15px;">
+                        <div class="detail-label">Flight segments:</div>
+                        ${slice.segments.map(seg => `
+                            <div class="segment">
+                                ${seg.airline} ${seg.flight_number}: ${seg.origin} → ${seg.destination} (${parseDuration(seg.duration)})
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="flight-section">
+                        <div class="section-title">${sliceType}</div>
+                        <div class="flight-route">
+                            <div class="airport">${slice.origin}</div>
+                            <div class="arrow">✈️</div>
+                            <div class="airport">${slice.destination}</div>
+                        </div>
+                        <div class="flight-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Departure</div>
+                                <div class="detail-value">${formatDateTime(slice.departure_time)}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Arrival</div>
+                                <div class="detail-value">${formatDateTime(slice.arrival_time)}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Duration</div>
+                                <div class="detail-value">${parseDuration(slice.duration)}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Stops</div>
+                                <div class="detail-value"><span class="stops-badge ${stopsClass}">${stopsText}</span></div>
+                            </div>
+                        </div>
+                        ${segmentsHTML}
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="flight-card">
+                    <div class="flight-header">
+                        <div>
+                            <h3 style="margin: 0; color: #333;">Option ${optionNum}</h3>
+                            <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">${offer.passengers} passenger${offer.passengers > 1 ? 's' : ''}</p>
+                        </div>
+                        <div class="price-tag">
+                            ${offer.price_per_passenger}
+                            <div class="price-detail">per person</div>
+                            <div class="price-detail" style="margin-top: 3px;">${offer.total_price} total</div>
+                        </div>
+                    </div>
+                    ${slicesHTML}
+                </div>
+            `;
+        }
+
+        // Real API response from curl test
+        const testData = {"origin":"BNA","destination":"Portland, Oregon, PDX","departure_date":"2026-06-15","return_date":"2026-06-20","passengers":1,"offers":[{"offer_id":"off_0000B6ppuTIKSXTV04vceR","total_price":"USD 319.33","price_per_passenger":"USD 319.33","passengers":1,"slices":[{"origin":"BNA","destination":"PDX","departure_time":"2026-06-15T18:43:00","arrival_time":"2026-06-16T00:50:00","duration":"PT8H7M","stops":1,"segments":[{"airline":"American Airlines","flight_number":"3925","origin":"BNA","destination":"DFW","departure":"2026-06-15T18:43:00","arrival":"2026-06-15T21:00:00","duration":"PT2H17M"},{"airline":"American Airlines","flight_number":"2620","origin":"DFW","destination":"PDX","departure":"2026-06-15T22:49:00","arrival":"2026-06-16T00:50:00","duration":"PT4H1M"}]},{"origin":"PDX","destination":"BNA","departure_time":"2026-06-20T05:06:00","arrival_time":"2026-06-20T14:11:00","duration":"PT7H5M","stops":1,"segments":[{"airline":"American Airlines","flight_number":"2658","origin":"PDX","destination":"PHX","departure":"2026-06-20T05:06:00","arrival":"2026-06-20T07:45:00","duration":"PT2H39M"},{"airline":"American Airlines","flight_number":"3073","origin":"PHX","destination":"BNA","departure":"2026-06-20T08:35:00","arrival":"2026-06-20T14:11:00","duration":"PT3H36M"}]}]},{"offer_id":"off_0000B6ppuTIKSXTV04vceG","total_price":"USD 319.33","price_per_passenger":"USD 319.33","passengers":1,"slices":[{"origin":"BNA","destination":"PDX","departure_time":"2026-06-15T19:32:00","arrival_time":"2026-06-16T00:50:00","duration":"PT7H18M","stops":1,"segments":[{"airline":"American Airlines","flight_number":"5475","origin":"BNA","destination":"DFW","departure":"2026-06-15T19:32:00","arrival":"2026-06-15T21:48:00","duration":"PT2H16M"},{"airline":"American Airlines","flight_number":"2620","origin":"DFW","destination":"PDX","departure":"2026-06-15T22:49:00","arrival":"2026-06-16T00:50:00","duration":"PT4H1M"}]},{"origin":"PDX","destination":"BNA","departure_time":"2026-06-20T05:06:00","arrival_time":"2026-06-20T14:11:00","duration":"PT7H5M","stops":1,"segments":[{"airline":"American Airlines","flight_number":"2658","origin":"PDX","destination":"PHX","departure":"2026-06-20T05:06:00","arrival":"2026-06-20T07:45:00","duration":"PT2H39M"},{"airline":"American Airlines","flight_number":"3073","origin":"PHX","destination":"BNA","departure":"2026-06-20T08:35:00","arrival":"2026-06-20T14:11:00","duration":"PT3H36M"}]}]}]};
+
+        // Render first 2 cards
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = testData.offers.slice(0, 2).map((offer, i) => renderFlightCard(offer, i + 1)).join('');
+    </script>
+</body>
+</html>
