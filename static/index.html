@@ -149,7 +149,7 @@
 <body>
     <div class="container">
         <h1>✈️ Find Cheap Flights</h1>
-        <p class="subtitle">Search for the best flight deals to Portland</p>
+        <p class="subtitle">Powered by Duffel - Search the best flight deals to Portland</p>
 
         <form id="searchForm">
             <div class="form-group">
@@ -163,6 +163,11 @@
             </div>
 
             <div class="form-group">
+                <label for="returnDate">Return date</label>
+                <input type="date" id="returnDate" required>
+            </div>
+
+            <div class="form-group">
                 <label for="passengers">Number of passengers</label>
                 <select id="passengers">
                     <option value="1">1 passenger</option>
@@ -172,6 +177,20 @@
                     <option value="5">5 passengers</option>
                     <option value="6">6 passengers</option>
                 </select>
+            </div>
+
+            <div class="form-group">
+                <label for="sortBy">Search preference</label>
+                <select id="sortBy">
+                    <option value="total_amount">Cheapest flights</option>
+                    <option value="total_duration">Fastest flights</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="maxBudget">Max budget per passenger (optional)</label>
+                <input type="number" id="maxBudget" placeholder="e.g., 500" min="0" step="50">
+                <small style="color: #666; font-size: 13px;">Leave empty for no limit</small>
             </div>
 
             <button type="submit" id="searchBtn">Search Flights</button>
@@ -206,7 +225,10 @@
 
             const origin = document.getElementById('origin').value;
             const date = document.getElementById('date').value;
+            const returnDate = document.getElementById('returnDate').value;
             const passengers = document.getElementById('passengers').value;
+            const sortBy = document.getElementById('sortBy').value;
+            const maxBudget = document.getElementById('maxBudget').value;
 
             // Hide previous results/errors
             results.style.display = 'none';
@@ -217,18 +239,26 @@
             searchBtn.disabled = true;
 
             try {
-                const threadId = 'web-' + Date.now();
-                const message = `Find flights from ${origin} on ${date} for ${passengers} passenger${passengers > 1 ? 's' : ''}`;
+                const payload = {
+                    origin: origin,
+                    departure_date: date,
+                    return_date: returnDate,
+                    passengers: parseInt(passengers),
+                    destination: "Portland, Oregon, PDX",
+                    sort_by: sortBy
+                };
 
-                const response = await fetch(`${API_URL}/chat`, {
+                // Add budget filter if specified
+                if (maxBudget && maxBudget > 0) {
+                    payload.max_budget_per_passenger = parseFloat(maxBudget);
+                }
+
+                const response = await fetch(`${API_URL}/search-dual`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        message: message,
-                        thread_id: threadId
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
@@ -240,7 +270,7 @@
                 // Show results
                 loading.style.display = 'none';
                 results.style.display = 'block';
-                resultContent.textContent = data.message;
+                resultContent.textContent = data.results;
 
             } catch (error) {
                 loading.style.display = 'none';
@@ -254,6 +284,15 @@
         // Set min date to today
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('date').setAttribute('min', today);
+        document.getElementById('returnDate').setAttribute('min', today);
+
+        // Auto-set return date when departure changes
+        document.getElementById('date').addEventListener('change', (e) => {
+            const depDate = new Date(e.target.value);
+            depDate.setDate(depDate.getDate() + 5); // Default 5 days later
+            const returnDate = depDate.toISOString().split('T')[0];
+            document.getElementById('returnDate').value = returnDate;
+        });
     </script>
 </body>
 </html>
