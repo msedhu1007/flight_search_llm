@@ -7,10 +7,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from langchain.agents import create_agent
-from langchain.messages import HumanMessage
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langgraph.checkpoint.memory import InMemorySaver
+from duffel_client import DuffelClient, format_duffel_for_display
+from datetime import datetime, timedelta
+import re
 
 
 # Load .env for local dev only (Railway injects env vars directly)
@@ -21,61 +20,18 @@ except ImportError:
     pass
 
 
-def get_mcp_config():
-    """Build MCP server config with environment-based settings"""
-    config = {
-        "kiwi": {
-            "transport": "streamable_http",
-            "url": "https://mcp.kiwi.com",
-        }
-    }
-
-    # TODO: Duffel MCP has bug with stdio transport in production
-    # Re-enable when fixed or switch to HTTP transport
-    # duffel_key = os.getenv("DUFFEL_API_KEY_LIVE")
-    # if duffel_key:
-    #     config["duffel"] = {
-    #         "transport": "stdio",
-    #         "command": "uvx",
-    #         "args": ["flights-mcp"],
-    #         "env": {
-    #             "DUFFEL_API_KEY_LIVE": duffel_key
-    #         }
-    #     }
-
-    return config
-
-
-client = MultiServerMCPClient(get_mcp_config())
-
-agent = None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    global agent
-
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError(
-            "OPENAI_API_KEY is missing. Add it to your .env file."
-        )
-
-    tools = await client.get_tools()
-
-    agent = create_agent(
-        model="openai:gpt-5-nano",
-        tools=tools,
-        checkpointer=InMemorySaver(),
-        system_prompt=SYSTEM_PROMPT,
-    )
+    # Startup - verify Duffel key
+    if not os.getenv("DUFFEL_API_KEY_LIVE"):
+        raise RuntimeError("DUFFEL_API_KEY_LIVE is missing")
 
     yield
 
     # Shutdown (cleanup if needed)
 
 
-app = FastAPI(title="Flight Search AI API", lifespan=lifespan)
+app = FastAPI(title="Flight Search AI API - Duffel Powered", lifespan=lifespan)
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -148,6 +104,8 @@ class FlightSearchRequest(BaseModel):
     destination: str = Field(default="Portland, Oregon, PDX")
     return_date: Optional[str] = Field(default=None, description="Return date, for example 2026-04-05")
     trip_length_days: int = Field(default=5, ge=1, description="Used if return_date is not provided")
+    sort_by: str = Field(default="total_amount", description="Sort by: total_amount (cheapest) or total_duration (fastest)")
+    max_budget_per_passenger: Optional[float] = Field(default=None, description="Max budget per passenger in USD")
 
 
 class ChatRequest(BaseModel):
@@ -171,85 +129,118 @@ def health_check():
     }
 
 
-@app.post("/chat")
-async def chat(
-    request: ChatRequest,
-    x_app_token: Optional[str] = Header(default=None),
-):
-    """Chat endpoint - multi-turn conversation for flight search"""
-    expected_token = os.getenv("FLIGHT_APP_TOKEN")
+@app.post("/search-dual")
+async def search_dual(request: FlightSearchRequest):
+    """Search flights using Duffel API"""
 
-    if expected_token:
-        if x_app_token != expected_token:
-            raise HTTPException(status_code=401, detail="Unauthorized")
+    # Calculate return date if needed
+    return_date = request.return_date
+    if not return_date:
+        dep_date = datetime.strptime(request.departure_date, "%Y-%m-%d")
+        ret_date = dep_date + timedelta(days=request.trip_length_days)
+        return_date = ret_date.strftime("%Y-%m-%d")
 
-    if agent is None:
-        raise HTTPException(status_code=500, detail="Agent is not initialized")
+    # Parse origin to airport code
+    origin_code = request.origin.upper().split()[-1] if len(request.origin) <= 4 else request.origin[:3].upper()
+    dest_code = "PDX"  # Portland
 
-    response = await agent.ainvoke(
-        {"messages": [HumanMessage(content=request.message)]},
-        config={"configurable": {"thread_id": request.thread_id}},
-    )
+    try:
+        duffel = DuffelClient()
+        result = await duffel.search_flights(
+            origin=origin_code,
+            destination=dest_code,
+            departure_date=request.departure_date,
+            return_date=return_date,
+            passengers=request.passengers,
+            sort_by=request.sort_by,
+            max_budget_per_passenger=request.max_budget_per_passenger
+        )
 
-    return {
-        "thread_id": request.thread_id,
-        "message": response["messages"][-1].content,
-    }
+        formatted = format_duffel_for_display(result)
 
-
-@app.post("/search-flights")
-async def search_flights(
-    request: FlightSearchRequest,
-    x_app_token: Optional[str] = Header(default=None),
-):
-    """Direct search endpoint - structured request with all params"""
-    expected_token = os.getenv("FLIGHT_APP_TOKEN")
-
-    if expected_token:
-        if x_app_token != expected_token:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
-    if agent is None:
-        raise HTTPException(status_code=500, detail="Agent is not initialized")
-
-    return_date_text = (
-        request.return_date
-        if request.return_date
-        else f"approximately {request.trip_length_days} days after the departure date"
-    )
-
-    user_request = f"""
-Find the cheapest round-trip flights.
-
-Origin: {request.origin}
-Destination: {request.destination}
-Number of passengers: {request.passengers}
-Trip type: Round trip
-Departure date: {request.departure_date}
-Return date: {return_date_text}
-Optimization preference: cheapest total price
-
-Important:
-- All passengers are traveling from the same origin.
-- Do not search separate origins per passenger.
-- Search for the cheapest total flight option.
-- Show price per passenger and estimated total price for all passengers when available.
-- Format the answer clearly using sections and tables.
-"""
-
-    response = await agent.ainvoke(
-        {"messages": [HumanMessage(content=user_request)]},
-        config={"configurable": {"thread_id": "flight-search-api"}},
-    )
-
-    return {
-        "request": {
+        return {
             "origin": request.origin,
             "destination": request.destination,
-            "passengers": request.passengers,
             "departure_date": request.departure_date,
-            "return_date": request.return_date,
-            "trip_length_days": request.trip_length_days,
-        },
-        "answer": response["messages"][-1].content,
-    }
+            "return_date": return_date,
+            "passengers": request.passengers,
+            "results": formatted
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Duffel search failed: {str(e)}")
+
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """Chat endpoint - uses Duffel API for flight search"""
+
+    # Simple parser for flight search intent
+    msg = request.message.lower()
+
+    # Extract origin (simple heuristic)
+    origin = None
+    date = None
+    passengers = 1
+
+    words = request.message.split()
+    for i, word in enumerate(words):
+        if word.lower() in ["from", "leaving"]:
+            if i + 1 < len(words):
+                origin = words[i + 1].strip(",")
+
+    # If no structured data, return prompt
+    if not origin:
+        return {
+            "thread_id": request.thread_id,
+            "message": "Where are you flying from and when? (e.g., 'From Nashville on June 15')"
+        }
+
+    # Try to extract date (basic)
+    import re
+    date_match = re.search(r'\d{4}-\d{2}-\d{2}', request.message)
+    if date_match:
+        date = date_match.group()
+
+    if not date:
+        return {
+            "thread_id": request.thread_id,
+            "message": f"Got origin: {origin}. What's your departure date? (format: YYYY-MM-DD)"
+        }
+
+    # Extract passengers
+    pass_match = re.search(r'(\d+)\s+passenger', request.message)
+    if pass_match:
+        passengers = int(pass_match.group(1))
+
+    # Calculate return date (5 days default)
+    dep_date = datetime.strptime(date, "%Y-%m-%d")
+    ret_date = dep_date + timedelta(days=5)
+    return_date = ret_date.strftime("%Y-%m-%d")
+
+    # Search Duffel
+    try:
+        origin_code = origin.upper() if len(origin) <= 3 else origin[:3].upper()
+        duffel = DuffelClient()
+        result = await duffel.search_flights(
+            origin=origin_code,
+            destination="PDX",
+            departure_date=date,
+            return_date=return_date,
+            passengers=passengers
+        )
+
+        formatted = format_duffel_for_display(result)
+
+        return {
+            "thread_id": request.thread_id,
+            "message": formatted
+        }
+
+    except Exception as e:
+        return {
+            "thread_id": request.thread_id,
+            "message": f"Search failed: {str(e)}"
+        }
+
+
