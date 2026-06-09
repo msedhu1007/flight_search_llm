@@ -260,12 +260,17 @@
 <body>
     <div class="container">
         <h1>✈️ Find Cheap Flights</h1>
-        <p class="subtitle">Powered by Duffel - Search the best flight deals to Portland</p>
+        <p class="subtitle">Powered by Duffel - Search the best flight deals</p>
 
         <form id="searchForm">
             <div class="form-group">
                 <label for="origin">Flying from (city or airport code)</label>
                 <input type="text" id="origin" placeholder="e.g., Nashville or BNA" required>
+            </div>
+
+            <div class="form-group">
+                <label for="destination">Flying to (city or airport code)</label>
+                <input type="text" id="destination" placeholder="e.g., Portland or PDX" value="Portland" required>
             </div>
 
             <div class="form-group">
@@ -443,6 +448,7 @@
             e.preventDefault();
 
             const origin = document.getElementById('origin').value;
+            const destination = document.getElementById('destination').value;
             const date = document.getElementById('date').value;
             const returnDate = document.getElementById('returnDate').value;
             const passengers = document.getElementById('passengers').value;
@@ -461,10 +467,10 @@
             try {
                 const payload = {
                     origin: origin,
+                    destination: destination,
                     departure_date: date,
                     return_date: returnDate,
                     passengers: parseInt(passengers),
-                    destination: "Portland, Oregon, PDX",
                     sort_by: sortBy,
                     flexible_dates: flexibleDates
                 };

@@ -245,9 +245,9 @@ Keep responses concise, friendly, and helpful.
 
 class FlightSearchRequest(BaseModel):
     origin: str = Field(..., description="Origin city or airport, for example BNA or Nashville")
+    destination: str = Field(..., description="Destination city or airport, for example PDX or Portland")
     departure_date: str = Field(..., description="Departure date, for example 2026-03-31")
     passengers: int = Field(default=1, ge=1, description="Number of passengers")
-    destination: str = Field(default="Portland, Oregon, PDX")
     return_date: Optional[str] = Field(default=None, description="Return date, for example 2026-04-05")
     trip_length_days: int = Field(default=5, ge=1, description="Used if return_date is not provided")
     sort_by: str = Field(default="total_amount", description="Sort by: total_amount (cheapest) or total_duration (fastest)")
@@ -287,9 +287,9 @@ async def search_dual(request: FlightSearchRequest):
         ret_date = dep_date + timedelta(days=request.trip_length_days)
         return_date = ret_date.strftime("%Y-%m-%d")
 
-    # Parse origin to airport code
+    # Parse origin and destination to airport codes
     origin_code = parse_airport_code(request.origin)
-    dest_code = "PDX"  # Portland
+    dest_code = parse_airport_code(request.destination)
 
     try:
         duffel = DuffelClient()
